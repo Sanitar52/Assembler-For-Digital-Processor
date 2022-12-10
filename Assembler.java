@@ -21,16 +21,33 @@ public class Assembler {
             scanner.close();
         } catch (FileNotFoundException e) {
             e.printStackTrace();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
     }
-    public void lineSplitter(String lineToSplit){
+    public void lineSplitter(String lineToSplit) throws IOException {
         fileLines = lineToSplit.split("[ ,./]+");
         switch (commandChecker(fileLines[0])){
             case 0 -> convertCommandToBinaryFirstFive(fileLines);
             case 1 -> {
-                //TODO: Burak burdan devam et.
+                ConvertCommandToBinaryImm(fileLines[0]);
+                binaryNumberString += RegToBinary(Integer.parseInt(fileLines[1].substring(1)));
+                binaryNumberString += RegToBinary(Integer.parseInt(fileLines[2].substring(1)));
+                binaryNumberString += ConvertImmToBinary(fileLines[3]);
+                System.out.print(binaryNumberString + "---");
+                bitsToHexConversion(binaryNumberString);
             }
+            case 2 -> convertLDorST(fileLines);
+            case 3 -> convertJump(fileLines);
             case 4 -> convertPushorPop(fileLines);
+            case 5 -> {
+                convertCommandToBnBne(fileLines[0]);
+                binaryNumberString += RegToBinary(Integer.parseInt(fileLines[1].substring(1)));
+                binaryNumberString += RegToBinary(Integer.parseInt(fileLines[2].substring(1)));
+                binaryNumberString += ConvertAdrToBinary(fileLines[3]);
+                System.out.print(binaryNumberString + "---");
+                bitsToHexConversion(binaryNumberString);
+            }
 
         }
     }
@@ -45,7 +62,30 @@ public class Assembler {
             default -> -1;
         };
     }
-    public void convertPushorPop(String[] list){
+    public void convertCommandToBnBne(String command) {
+        switch (command) {
+            case "BE" -> binaryNumberString = "01111";
+            case "BNE" -> binaryNumberString = "10000";
+        }
+    }
+    public String ConvertAdrToBinary(String addr) {
+        String s = Integer.toBinaryString(Integer.parseInt(addr));
+        if (Integer.parseInt(addr) < 0) {
+            return s.substring(s.length() - 7);
+        } else {
+            while (s.length() < 7) {
+                s = "0" + s;
+            }
+            return s;
+        }
+    }
+    public void convertJump(String[] addr) throws IOException {
+        binaryNumberString = "01100";
+        String binaryAddr = addrToBinaryJump(addr[1]);
+        binaryNumberString = binaryNumberString + binaryAddr;
+        bitsToHexConversion(binaryNumberString);
+    }
+    public void convertPushorPop(String[] list) throws IOException {
         switch (list[0]) {
             case "PUSH" -> binaryNumberString = "01101";
             case "POP" -> binaryNumberString = "01110";
@@ -55,7 +95,33 @@ public class Assembler {
         binaryNumberString = binaryNumberString + RegToBinary(removedRInt) + "00000000000";
         bitsToHexConversion(binaryNumberString);
     }
-    public void convertCommandToBinaryFirstFive(String[] list){
+    public void convertLDorST(String[] list) throws IOException {
+        switch (list[0]){
+            case "LD" -> binaryNumberString = "01010";
+            case "ST" -> binaryNumberString = "01011";
+        }
+        removedR = list[1].replace("R", "");
+        int removedRInt = Integer.parseInt(removedR);
+        binaryNumberString = binaryNumberString + RegToBinary(removedRInt);
+        String addrString = list[2];
+        String binaryAddr = addrToBinaryLDST(addrString);
+        binaryNumberString = binaryNumberString + binaryAddr;
+        bitsToHexConversion(binaryNumberString);
+
+    }
+    public String addrToBinaryJump(String number){
+        StringBuilder s = new StringBuilder(Integer.toBinaryString(Integer.parseInt(number)));
+        if (Integer.parseInt(number) < 0){
+            return s.substring(s.length() - 14);
+        }
+        else {
+            while (s.length() < 14){
+                s.insert(0, "0");
+            }
+            return s.toString();
+        }
+    }
+    public void convertCommandToBinaryFirstFive(String[] list) throws IOException {
         switch (list[0]) {
             case "SUB" -> binaryNumberString = "00000";
             case "ADD" -> binaryNumberString = "00001";
@@ -72,8 +138,51 @@ public class Assembler {
         removedR = list[3].replace("R", "");
         removedRInt = Integer.parseInt(removedR);
         binaryNumberString = binaryNumberString + RegToBinary(removedRInt) + "000";
-        System.out.println(binaryNumberString);
         bitsToHexConversion(binaryNumberString);
+    }
+    public String ConvertImmToBinary(String imm) { // sadece -64 ve 63 arası
+        String s = Integer.toBinaryString(Integer.parseInt(imm));
+        if (Integer.parseInt(imm) < 0) {
+            return s.substring(s.length() - 7);
+        } else {
+            switch (s.length()) {
+                case 1:
+                    return "000000" + s;
+                case 2:
+                    return "00000" + s;
+                case 3:
+                    return "0000" + s;
+                case 4:
+                    return "000" + s;
+                case 5:
+                    return "00" + s;
+                case 6:
+                    return "0" + s;
+                default:
+                    return s;
+            }
+        }
+    }
+    public void ConvertCommandToBinaryImm(String command) {
+        switch (command) {
+            case "SUBI" -> binaryNumberString = "00110";
+            case "ADDI" -> binaryNumberString = "00101";
+            case "ANDI" -> binaryNumberString = "00111";
+            case "ORI" -> binaryNumberString = "01000";
+            case "XORI" -> binaryNumberString = "01001";
+        }
+    }
+    public String addrToBinaryLDST(String number){
+        StringBuilder s = new StringBuilder(Integer.toBinaryString(Integer.parseInt(number)));
+        if (Integer.parseInt(number) < 0){
+             return s.substring(s.length() - 10);
+        }
+        else {
+            while (s.length() < 10){
+                s.insert(0, "0");
+            }
+            return s.toString();
+        }
     }
    public String RegToBinary(int number){
        return switch (number){
@@ -96,7 +205,7 @@ public class Assembler {
            default -> throw new IllegalStateException("Unexpected value: " + number);
        };
     }
-    public void bitsToHexConversion(String bitStream){
+    public void bitsToHexConversion(String bitStream) throws IOException {
         int byteLength = 4;
         int bitStartPos = 0, bitPos = 0;
         String hexString = "";
@@ -128,13 +237,16 @@ public class Assembler {
             bitPos = 0;
             sum = 0;
         }
-        System.out.println(hexString);
+        FileWriter fw = new FileWriter("output.txt", true);
+        BufferedWriter out = new BufferedWriter(fw);
+        out.write(hexString);
+        out.newLine();
+        out.close();
     }
     public static void main(String[] args) {
         String fileName = "test.txt";
         Assembler assembler = new Assembler();
         assembler.fileLineReader(fileName);
-
     }
 
 
